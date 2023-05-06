@@ -77,18 +77,18 @@ void EasyWiFi::start()
 		if (Read_Credentials(G_ssid, G_pass) == 0) // read credentials, if not possible, re-use the old-already loaded credentials
 		{
 			NINAled(ORANGE); // no credentials found SET YELLOW
-#ifdef Debug_On
-			Serial.println("* Using old credentials");
-#endif
+			#ifdef Debug_On
+				Serial.println("* Using old credentials");
+			#endif
 		}
 		while ((G_Wifistatus != WL_CONNECTED) || (WiFi.RSSI() <= -90) || (WiFi.RSSI() == 0)) // attempt to connect to WiFi network:
 		{
 			noconnect = 0;
 			while (((G_Wifistatus != WL_CONNECTED) || (WiFi.RSSI() <= -90) || (WiFi.RSSI() == 0)) && noconnect < MAX_CONNECT) // attempt to connect to WiFi network 3 times
 			{
-#ifdef Debug_On
-				Serial.print("* Attempt#"); Serial.print(noconnect); Serial.print(" to connect to Network: "); Serial.println(G_ssid); // print the network name (SSID);
-#endif
+				#ifdef Debug_On
+					Serial.print("* Attempt#"); Serial.print(noconnect); Serial.print(" to connect to Network: "); Serial.println(G_ssid); // print the network name (SSID);
+				#endif
 				G_Wifistatus = WiFi.begin(G_ssid, G_pass);     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
 				delay(2000);                                   // wait 2 seconds for connection:
 				noconnect++;                                   // try-counter
@@ -98,24 +98,24 @@ void EasyWiFi::start()
 			if (G_Wifistatus == WL_CONNECTED)
 			{
 				NINAled(GREEN); // Set Green   
-#ifdef Debug_On
-				printWiFiStatus();                        // you're connected now, so print out the status anmd break while loop
-#endif
+				#ifdef Debug_On
+					printWiFiStatus();                        // you're connected now, so print out the status anmd break while loop
+				#endif
 				break;
 			}
 			else if ((totalconnect > ESCAPE_CONNECT) || (G_useAP == false)) // quite login service ?
 			{
 				NINAled(RED); // Set red 
-#ifdef Debug_On
-				Serial.println("* Connection not possible after too many retries, quit wifi.start process");
-#endif
+				#ifdef Debug_On
+					Serial.println("* Connection not possible after too many retries, quit wifi.start process");
+				#endif
 				break;
 			}
 			else // no connection possible : exit without server started
 			{
-#ifdef Debug_On
-				Serial.println("* Connection not possible after several retries, opening Access Point");
-#endif
+				#ifdef Debug_On
+					Serial.println("* Connection not possible after several retries, opening Access Point");
+				#endif
 				// start direct-Wifi connect to manualy input Wifi credentials
 				NINAled(PURPLE); // no network, : RED
 				listNetworks();                         // load avaialble networks in a list
@@ -130,17 +130,17 @@ void EasyWiFi::start()
 						G_APStatus = WiFi.status();        // it has changed update the variable
 						if (G_APStatus == WL_AP_CONNECTED) // a device has connected to the AP
 						{
-#ifdef Debug_On                     
-							Serial.println("Device connected to AP\n");
-#endif                 
+							#ifdef Debug_On                     
+								Serial.println("Device connected to AP\n");
+							#endif                 
 							NINAled(CYAN); // Client on AP : purple
 							G_DNSRqstcounter = 0; // reset DNS counter
 						}
 						else // a device has disconnected from the AP, and we are back in listening mode
 						{
-#ifdef Debug_On                  
-							Serial.println("Device disconnected from AP\n");
-#endif                    
+							#ifdef Debug_On                  
+								Serial.println("Device disconnected from AP\n");
+							#endif                    
 						}
 					} // end if loop changed G_APStatus                              
 					if (G_APStatus == WL_AP_CONNECTED)  // IF client connected to AP, start DNS and check Webserver
@@ -160,34 +160,34 @@ void EasyWiFi::start()
 	else
 	{
 		NINAled(GREEN); // Set Green  
-#ifdef Debug_On
-		Serial.println("* Already connected.");                     // you're already connected
-		printWiFiStatus();
-#endif
+		#ifdef Debug_On
+			Serial.println("* Already connected.");                     // you're already connected
+			printWiFiStatus();
+		#endif
 	}
 }
 
 // SERIALPRINT Wifi Status - only for debug
 void EasyWiFi::printWiFiStatus()
 {
-#ifdef Debug_On
+	#ifdef Debug_On
 	// print the SSID of the network you're attached to:
-	Serial.print("* SSID: ");
-	Serial.print(WiFi.SSID());
-	// print your WiFi shield's IP address:
-	IPAddress ip = WiFi.localIP();
-	Serial.print(" - IP Address: ");
-	Serial.print(ip);
-	// print your WiFi gateway:
-	IPAddress ip2 = WiFi.gatewayIP();
-	Serial.print(" - IP Gateway: ");
-	Serial.print(ip2);
-	// print the received signal strength:
-	long rssi = WiFi.RSSI();
-	Serial.print("- Rssi: ");
-	Serial.print(rssi);
-	Serial.println(" dBm");
-#endif
+		Serial.print("* SSID: ");
+		Serial.print(WiFi.SSID());
+		// print your WiFi shield's IP address:
+		IPAddress ip = WiFi.localIP();
+		Serial.print(" - IP Address: ");
+		Serial.print(ip);
+		// print your WiFi gateway:
+		IPAddress ip2 = WiFi.gatewayIP();
+		Serial.print(" - IP Gateway: ");
+		Serial.print(ip2);
+		// print the received signal strength:
+		long rssi = WiFi.RSSI();
+		Serial.print("- Rssi: ");
+		Serial.print(rssi);
+		Serial.println(" dBm");
+	#endif
 }
 
 // SErase credentials from disk file
@@ -227,15 +227,15 @@ void EasyWiFi::listNetworks()
 	int numSsid = WiFi.scanNetworks();
 	if (numSsid == -1)
 	{
-#ifdef Debug_On        
-		Serial.println("* Couldn't get a Wifi List");
-#endif
+		#ifdef Debug_On        
+			Serial.println("* Couldn't get a Wifi List");
+		#endif
 	}
 	else
 	{
-#ifdef Debug_On    
-		Serial.print("* Found total "); Serial.print(numSsid); Serial.println(" Networks.");
-#endif      
+		#ifdef Debug_On    
+			Serial.print("* Found total "); Serial.print(numSsid); Serial.println(" Networks.");
+		#endif      
 		G_ssidCounter = 0;
 		// print the network number and name for each network found:
 		for (int thisNet = 0; thisNet < numSsid; thisNet++)
@@ -246,15 +246,15 @@ void EasyWiFi::listNetworks()
 				for (t = 0; t < tmp.length(); ++t)
 					G_SSIDList[G_ssidCounter][t] = tmp[t];
 				G_SSIDList[G_ssidCounter][t] = 0;
-#ifdef Debug_OnP           
-				Serial.print(G_ssidCounter);
-				Serial.print(". ");
-				Serial.print(G_SSIDList[G_ssidCounter]);
-				Serial.print("\t\tSignal: ");
-				Serial.print(WiFi.RSSI(thisNet));
-				Serial.println(" dBm");
-				Serial.flush();
-#endif        
+				#ifdef Debug_On           
+					Serial.print(G_ssidCounter);
+					Serial.print(". ");
+					Serial.print(G_SSIDList[G_ssidCounter]);
+					Serial.print("\t\tSignal: ");
+					Serial.print(WiFi.RSSI(thisNet));
+					Serial.println(" dBm");
+					Serial.flush();
+				#endif        
 				G_ssidCounter = G_ssidCounter + 1;
 			}
 		} // end for list loop
@@ -266,9 +266,9 @@ void EasyWiFi::listNetworks()
 void EasyWiFi::APSetup()
 {
 	int tr = 5;  // 5 tries to setup AP
-#ifdef Debug_On
-	Serial.print("* Creating access point named: "); Serial.println(ACCESPOINTNAME);
-#endif
+	#ifdef Debug_On
+		Serial.print("* Creating access point named: "); Serial.println(ACCESPOINTNAME);
+	#endif
 	G_APip = IPAddress((char)random(11, 172), (char)random(0, 255), (char)random(0, 255), 0x01); // Generate random IP adress in Privit IP range
 	WiFi.end();                                                       // close Wifi - juist to be suire
 	delay(3000);                                                      // Wait 3 seconds
@@ -278,9 +278,9 @@ void EasyWiFi::APSetup()
 		G_APStatus = WiFi.beginAP(ACCESPOINTNAME, ACCESS_POINT_CHANNEL);             // setup AccessPoint
 		if (G_APStatus != WL_AP_LISTENING) // retry
 		{
-#ifdef Debug_On
-			Serial.print(".");
-#endif        
+			#ifdef Debug_On
+				Serial.print(".");
+			#endif        
 			--tr;
 			//WiFi.disconnect();
 			WiFi.config(G_APip, G_APip, G_APip, IPAddress(255, 255, 255, 0));
@@ -290,9 +290,9 @@ void EasyWiFi::APSetup()
 	}
 	if (tr == 0)
 	{  // not possible to connect in 5 retries
-#ifdef Debug_On  
-		Serial.println("* Creating access point failed");
-#endif     
+		#ifdef Debug_On  
+			Serial.println("* Creating access point failed");
+		#endif     
 	}
 	else
 	{
@@ -323,21 +323,21 @@ void EasyWiFi::APDNSScan()
 		//if ( (G_APDNSclientip != G_APip) && (G_DNSRqstcounter<=DNS_MAX_REQUESTS) )       // skip own requests - ie ntp-pool time requestfrom Wifi module
 		if ((G_APDNSclientip != G_APip))       // skip own requests - ie ntp-pool time requestfrom Wifi module
 		{
-#ifdef Debug_On_X  
-			Serial.print("DNS-packets ("); Serial.print(packetSize);
-			Serial.print(") from "); Serial.print(G_APDNSclientip);
-			Serial.print(" port "); Serial.println(G_DNSClientport);
-			for (t = 0; t < packetSize; ++t)
-			{
-				Serial.print(G_UDPPacketbuffer[t], HEX); Serial.print(":");
-			}
-			Serial.println(" ");
-			for (t = 0; t < packetSize; ++t)
-			{
-				Serial.print((char)G_UDPPacketbuffer[t]);//Serial.print("");
-			}
-			Serial.println("");
-#endif   
+			#ifdef Debug_On_X  
+				Serial.print("DNS-packets ("); Serial.print(packetSize);
+				Serial.print(") from "); Serial.print(G_APDNSclientip);
+				Serial.print(" port "); Serial.println(G_DNSClientport);
+				for (t = 0; t < packetSize; ++t)
+				{
+					Serial.print(G_UDPPacketbuffer[t], HEX); Serial.print(":");
+				}
+				Serial.println(" ");
+				for (t = 0; t < packetSize; ++t)
+				{
+					Serial.print((char)G_UDPPacketbuffer[t]);//Serial.print("");
+				}
+				Serial.println("");
+			#endif   
 			//Copy Packet ID and IP into DNS header and DNS answer
 			G_DNSReplyheader[0] = G_UDPPacketbuffer[0]; G_DNSReplyheader[1] = G_UDPPacketbuffer[1]; // Copy ID of Packet offset 0 in Header
 			G_DNSReplyanswer[12] = G_APip[0]; G_DNSReplyanswer[13] = G_APip[1]; G_DNSReplyanswer[14] = G_APip[2]; G_DNSReplyanswer[15] = G_APip[3]; // copy AP Ip adress offset 12 in Answer
@@ -356,21 +356,21 @@ void EasyWiFi::APDNSScan()
 			for (t = 0; t < DNS_ANSWER_SIZE; ++t)
 				G_DNSReplybuffer[r++] = G_DNSReplyanswer[t];
 			replySize = r;
-#ifdef Debug_On_X  
-			Serial.print("* DNS-Reply ("); Serial.print(replySize);
-			Serial.print(") from "); Serial.print(G_APip);
-			Serial.print(" port "); Serial.println(UDP_PORT);
-			for (t = 0; t < replySize; ++t)
-			{
-				Serial.print(G_DNSReplybuffer[t], HEX); Serial.print(":");
-			}
-			Serial.println(" ");
-			for (t = 0; t < replySize; ++t)
-			{
-				Serial.print((char)G_DNSReplybuffer[t]);//Serial.print("");
-			}
-			Serial.println("");
-#endif      
+			#ifdef Debug_On_X  
+				Serial.print("* DNS-Reply ("); Serial.print(replySize);
+				Serial.print(") from "); Serial.print(G_APip);
+				Serial.print(" port "); Serial.println(UDP_PORT);
+				for (t = 0; t < replySize; ++t)
+				{
+					Serial.print(G_DNSReplybuffer[t], HEX); Serial.print(":");
+				}
+				Serial.println(" ");
+				for (t = 0; t < replySize; ++t)
+				{
+					Serial.print((char)G_DNSReplybuffer[t]);//Serial.print("");
+				}
+				Serial.println("");
+			#endif      
 			// Send DSN UDP packet
 			G_UDPAP_DNS.beginPacket(G_APDNSclientip, G_DNSClientport); //reply DNSquestion
 			G_UDPAP_DNS.write(G_DNSReplybuffer, replySize);
@@ -391,17 +391,17 @@ void EasyWiFi::APWiFiClientCheck()
 	WiFiClient client = G_APWebserver.available();  // listen for incoming clients
 	if (client) // if you get a client,
 	{
-#ifdef Debug_On     
-		Serial.println("* New AP webclient");        // print a message out the serial port
-#endif    
+		#ifdef Debug_On     
+			Serial.println("* New AP webclient");        // print a message out the serial port
+		#endif    
 		while (client.connected()) // loop while the client's connected
 		{
 			if (client.available()) // if there's bytes to read from the client,
 			{
 				c = client.read();               // read a byte, then
-#ifdef Debug_OnP  
-				Serial.write(c);                 // print it out the serial monitor
-#endif          
+				#ifdef Debug_On  
+					Serial.write(c);                 // print it out the serial monitor
+				#endif          
 				if (c == '\n') // if the byte is a newline character
 				{
 					// if the current line is blank, you got two newline characters in a row.
@@ -449,18 +449,18 @@ void EasyWiFi::APWiFiClientCheck()
 				// Check to see if the client request was a post on our checkpass.php
 				if (currentLine.endsWith("POST /checkpass.php"))
 				{
-#ifdef Debug_On            
-					Serial.println("* Found APServer POST");
-#endif                
+					#ifdef Debug_On            
+						Serial.println("* Found APServer POST");
+					#endif                
 					currentLine = "";
 					while (client.connected()) // loop while the client's connected
 					{
 						if (client.available()) // if there's bytes to read from the client,
 						{
 							c = client.read();                        // read a byte, then
-#ifdef Debug_On_X                      
-							Serial.write(c);                          // print it out the serial monitor
-#endif                   
+							#ifdef Debug_On_X                      
+								Serial.write(c);                          // print it out the serial monitor
+							#endif                   
 							if (c == '\n') // if the byte is a newline character
 							{
 								//if (currentLine.length() == 0) break; // no lenght :  end of data request
@@ -493,14 +493,14 @@ void EasyWiFi::APWiFiClientCheck()
 								}
 								else
 								{
-#ifdef Debug_On                        
-									Serial.print("* Invalid input from AP Client"); Serial.println(currentLine);
-#endif                            
+									#ifdef Debug_On                        
+										Serial.print("* Invalid input from AP Client"); Serial.println(currentLine);
+									#endif                            
 								}
-#ifdef Debug_On                        
-								Serial.print("\n* AP client input found: ");
-								Serial.print(G_ssid); Serial.print(","); Serial.println("******");
-#endif                     
+								#ifdef Debug_On                        
+									Serial.print("\n* AP client input found: ");
+									Serial.print(G_ssid); Serial.print(","); Serial.println("******");
+								#endif                     
 								// copy inbpouts to G_ssid and G_pass
 								G_APInputflag = 1;                             // flag Ap input
 								break;
@@ -532,9 +532,9 @@ void EasyWiFi::APWiFiClientCheck()
 					client.println();
 					client.print("<meta http-equiv=\"refresh\" content=\"0;url=http://"); client.print(WiFi.localIP()); client.print("\">");
 					client.println();
-#ifdef Debug_OnP                  
-					Serial.println("**generate_204 replyied 200 OK");
-#endif             
+					#ifdef Debug_On                  
+						Serial.println("**generate_204 replyied 200 OK");
+					#endif             
 					// The HTTP response ends with another blank line:
 					client.println();
 					// break out of the while loop:              
@@ -576,9 +576,9 @@ void EasyWiFi::APWiFiClientCheck()
 
 		// close the connection:
 		client.stop();
-#ifdef Debug_On     
-		Serial.println("* AP webclient disconnected");
-#endif
+		#ifdef Debug_On     
+			Serial.println("* AP webclient disconnected");
+		#endif
 	} // end If Client
 }
 
@@ -622,17 +622,17 @@ byte EasyWiFi::Read_Credentials(char* buf1, char* buf2)
 			bufc[u] = 0;
 			SimpleDecypher(bufc, buf2);
 		}
-#ifdef Debug_On
-		Serial.print("* Read Credentials : ");
-		Serial.println(c);
-#endif    
+		#ifdef Debug_On
+			Serial.print("* Read Credentials : ");
+			Serial.println(c);
+		#endif    
 		file.close(); return(c);
 	}
 	else
 	{
-#ifdef Debug_On
-		Serial.println("* Cant read Credentials :");
-#endif    
+		#ifdef Debug_On
+			Serial.println("* Cant read Credentials :");
+		#endif    
 		file.close(); return(0);
 	}
 }
@@ -658,18 +658,18 @@ byte EasyWiFi::Write_Credentials(char* buf1, int size1, char* buf2, int size2)
 	c++;
 	if (c != 0)
 	{
-#ifdef Debug_On
-		Serial.print("* Written Credentials : ");
-		Serial.println(c);
-#endif
+		#ifdef Debug_On
+			Serial.print("* Written Credentials : ");
+			Serial.println(c);
+		#endif
 		file.close();
 		return(c);
 	}
 	else
 	{
-#ifdef Debug_On
-		Serial.println("* Cant write Credentials");
-#endif  
+		#ifdef Debug_On
+			Serial.println("* Cant write Credentials");
+		#endif  
 		file.close();
 		return(0);
 	}
@@ -685,16 +685,16 @@ byte EasyWiFi::Erase_Credentials()
 		file.seek(0);
 		file.write(empty, 16); //overwrite flash
 		file.erase();
-#ifdef Debug_On
-		Serial.println("* Erased Credentialsfile : ");
-#endif  
+		#ifdef Debug_On
+			Serial.println("* Erased Credentialsfile : ");
+		#endif  
 		file.close(); return(1);
 	}
 	else
 	{
-#ifdef Debug_On
-		Serial.println("* Could not erased Credentialsfile : ");
-#endif  
+		#ifdef Debug_On
+			Serial.println("* Could not erased Credentialsfile : ");
+		#endif  
 		file.close(); return(0);
 	}
 }
@@ -705,16 +705,16 @@ byte EasyWiFi::Check_Credentials()
 	WiFiStorageFile file = WiFiStorage.open(CREDENTIAL_FILE);
 	if (file)
 	{
-#ifdef Debug_On
-		Serial.println("* Found Credentialsfile : ");
-#endif  
+		#ifdef Debug_On
+			Serial.println("* Found Credentialsfile : ");
+		#endif  
 		file.close(); return(1);
 	}
 	else
 	{
-#ifdef Debug_On
-		Serial.println("* Could not find Credentialsfile : ");
-#endif  
+		#ifdef Debug_On
+			Serial.println("* Could not find Credentialsfile : ");
+		#endif  
 		file.close(); return(0);
 	}
 }
@@ -730,9 +730,9 @@ void EasyWiFi::SimpleCypher(char* textin, char* textout)
 		t++;
 	}
 	textout[t] = 0;
-#ifdef Debug_On
-	// Serial.print("* Cyphered ");Serial.print(t);Serial.print(" - ");Serial.println(textout);
-#endif
+	#ifdef Debug_On
+		// Serial.print("* Cyphered ");Serial.print(t);Serial.print(" - ");Serial.println(textout);
+	#endif
 }
 
 /* Simple DeCyphering the text code */
@@ -745,9 +745,9 @@ void EasyWiFi::SimpleDecypher(char* textin, char* textout)
 		t++;
 	}
 	textout[t] = 0;
-#ifdef Debug_On
-	// Serial.print("* Decyphered ");Serial.print(t);Serial.print(" - ");Serial.println(textout);
-#endif
+	#ifdef Debug_On
+		// Serial.print("* Decyphered ");Serial.print(t);Serial.print(" - ");Serial.println(textout);
+	#endif
 }
 
 

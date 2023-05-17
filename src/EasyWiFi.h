@@ -19,7 +19,7 @@
 #define ACCESS_POINT_CHANNEL  5                        // AP wifi channel
 #define SECRET_SSID "UnKnownWireless"	    // Backup SSID - not required
 #define SECRET_PASS "NoPassword"	        // Backup Pass - not required
-#define CREDENTIAL_FILE "/fs/credfile"
+
 #define ACCESS_POINT_NAME "EasyWiFi_AP"
 #define MAX_CONNECT 4                        // Max number of wifi logon connects before opening AP
 #define ESCAPE_CONNECT 15                    // Max number of Total wifi logon retries-connects before escaping/stopping the Wifi start
@@ -44,26 +44,21 @@ class EasyWiFi
 {
 public:
     EasyWiFi();
-    void start();
-    byte erase();
-    byte apname(char* name);
-    void seed(int value);
-    void led(boolean value);
-    void useAP(boolean value);
-    void NINAled(char r, char g, char b);
+    void Start();
+    byte Erase();
+    byte SetAccessPointName(char* name);
+    void SetSeed(int seed);
+    void UseLED(boolean value);
+    void UseAccessPoint(boolean value);
+    void SetNINA_LED(char r, char g, char b);
 
 private:
-    void SimpleDecypher(char* textin, char* textout);
-    void SimpleCypher(char* textin, char* textout);
-    byte Check_Credentials();
-    byte Erase_Credentials();
-    byte Write_Credentials(char* buf1, int size1, char* buf2, int size2);
-    byte Read_Credentials(char* buf1, char* buf2);
-    void APWiFiClientCheck();
-    void APDNSScan();
-    void listNetworks();
-    void APSetup();
-    void printWiFiStatus();
+    void ListNetworks();
+    void AccessPointSetup();
+    void AccessPointDNSScan();
+    void AccessPointWiFiClientCheck();
+    void PrintWiFiStatus();
+    bool IsWifiNotConnectedOrReachable(int wifiStatus);
 };
 
 #endif

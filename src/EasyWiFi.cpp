@@ -6,38 +6,38 @@
 *  RGB LED INDICATOR on uBlox nina Module
 *  GREEN: Connected
 *
-*  BLUE: (Stored) Credentials found, connecting         <<<<--_
-*  YELLOW: No Stored Credentials found, connecting             \
-*  PURPLE: Can't connect, opening AP for credentials input      |
-*  CYAN: Client connected to AP, wait for credentials input >>--/
+*  BLUE: (Stored) Credentials found, connecting					 <<<<--_
+*  YELLOW: No Stored Credentials found, connecting					     \
+*  PURPLE: Can'i connect, opening Access Point for credentials input      |
+*  CYAN: Client connected to Access Point, wait for credentials input >>--/
 *
-*  RED: Not connected / Can't connect, wifi.start is stopped, return to program
+*  RED: Not connected / Can'i connect, wifi.start is stopped, return to program
 *
 * Released into the public domain on github: https://github.com/javos65/EasyWifi-for-MKR1010
 */
 
 #include "EasyWiFi.h"
+#include "CredentialsHandler.h"
 
 #define Debug_On       // Debug option  -serial print
 //#define Debug_On_X   // Debug option - incl packets
 
-char ACCESPOINTNAME[SSID_BUFFER_SIZE] = ACCESS_POINT_NAME;    // ACCESS POINT name, dynamic adaptable
-char G_SSIDList[MAX_SSID][SSID_BUFFER_SIZE];        // Store of available SSID's
-int G_APStatus = WL_IDLE_STATUS, G_APInputflag;  // global AP flag to use
-int G_ssidCounter = 0;                           // Gloabl counter for number of found SSID's
-char G_ssid[32] = SECRET_SSID;                   // optional init: your network SSID (name) 
-char G_pass[32] = SECRET_PASS;                   // optional init: your network password 
-WiFiServer G_APWebserver(80);                    // Global Acces Point Web Server
-WiFiUDP G_UDPAP_DNS;                             // A UDP instance to let us send and receive packets over UDP
-IPAddress G_APip;                                // Global Acces Point IP adress 
-IPAddress G_APDNSclientip;
-int G_DNSClientport;
-int G_DNSRqstcounter = 0;
-int SEED = 4;
-boolean G_useAP = 1; // use AP after loging failure, or quit with no AP service
-boolean G_ledon = 1; // leds on or of
-byte G_UDPPacketbuffer[UDP_PACKET_SIZE];  // buffer to hold incoming and outgoing packets
-byte G_DNSReplyheader[DNS_HEADER_SIZE] = {
+char G_AccessPointName[SSID_BUFFER_SIZE] = ACCESS_POINT_NAME; // ACCESS POINT name, dynamic adaptable
+char G_SSID_List[MAX_SSID][SSID_BUFFER_SIZE];				// Store of available SSID's
+int G_AP_Status = WL_IDLE_STATUS, G_AP_InputFlag;  // global AP flag to use
+int G_SSID_Counter = 0;                           // Gloabl counter for number of found SSID's
+char G_SSID[32] = SECRET_SSID;                   // optional init: your network SSID (name) 
+char G_PASS[32] = SECRET_PASS;                   // optional init: your network password 
+WiFiServer G_AP_Webserver(80);                    // Global Acces Point Web Server
+WiFiUDP G_UDP_AP_DNS;                            // A UDP instance to let us send and receive packets over UDP
+IPAddress G_AP_IP;                                // Global Acces Point IP adress 
+IPAddress G_AP_DNS_CLIENT_IP;
+int G_DNS_ClientPort;
+int G_DNS_RequestCounter = 0;
+boolean G_UseAP = 1; // use AP after loging failure, or quit with no AP service
+boolean G_LED_On = 1; // leds on or of
+byte G_UDP_PacketBuffer[UDP_PACKET_SIZE];  // buffer to hold incoming and outgoing packets
+byte G_DNS_ReplyHeader[DNS_HEADER_SIZE] = {
   0x00,0x00,   // ID, to be filled in #offset 0
   0x81,0x80,   // answer header Codes
   0x00,0x01,   //QDCOUNT = 1 question
@@ -45,67 +45,66 @@ byte G_DNSReplyheader[DNS_HEADER_SIZE] = {
   0x00,0x00,   //NSCOUNT / ignore
   0x00,0x00    //ARCOUNT / ignore
 };
-byte G_DNSReplyanswer[DNS_ANSWER_SIZE] = {
+byte G_DNS_ReplyAnswer[DNS_ANSWER_SIZE] = {
   0xc0,0x0c,  // pointer to pos 12 : NAME Labels
   0x00,0x01,  // TYPE
   0x00,0x01,  // CLASS
   0x00,0x00,  // TTL
   0x18,0x4c,  // TLL 2 days
-  0x00,0x04,   // RDLENGTH = 4
-  0x00,0x00,   // IP adress octets to be filled #offset 12
-  0x00,0x00    // IP adress octeds to be filled
+  0x00,0x04,  // RDLENGTH = 4
+  0x00,0x00,  // IP adress octets to be filled #offset 12
+  0x00,0x00   // IP adress octeds to be filled
 };
 
 // ***************************************
 
 
-EasyWiFi::EasyWiFi()
-{
-}
+EasyWiFi::EasyWiFi() {}
 
 // Login to local network  //
-void EasyWiFi::start()
+void EasyWiFi::Start()
 {
-	int  noconnect = 0, totalconnect = 0;;
+	int  connectionAttempts = 0, totalConnectionAttempts = 0;;
 	WiFi.disconnect();
 	delay(2000);
-	NINAled(BLUE); // Starting to connect: Set Blue  
+	SetNINA_LED(BLUE); // Starting to connect: Set Blue  
 	int G_Wifistatus = WiFi.status();
-	if ((G_Wifistatus != WL_CONNECTED) || (WiFi.RSSI() <= -90) || (WiFi.RSSI() == 0)) // check if connected
+	if (IsWifiNotConnectedOrReachable(G_Wifistatus)) // check if connected
 	{
 		// Read SSId File
-		if (Read_Credentials(G_ssid, G_pass) == 0) // read credentials, if not possible, re-use the old-already loaded credentials
+		if (CredentialsHandler::Read_Credentials(G_SSID, G_PASS) == 0) // read credentials, if not possible, re-use the old-already loaded credentials
 		{
-			NINAled(ORANGE); // no credentials found SET YELLOW
+			SetNINA_LED(ORANGE); // no credentials found SET YELLOW/ORANGE
 			#ifdef Debug_On
 				Serial.println("* Using old credentials");
 			#endif
 		}
-		while ((G_Wifistatus != WL_CONNECTED) || (WiFi.RSSI() <= -90) || (WiFi.RSSI() == 0)) // attempt to connect to WiFi network:
+
+		while (IsWifiNotConnectedOrReachable(G_Wifistatus)) // attempt to connect to WiFi network:
 		{
-			noconnect = 0;
-			while (((G_Wifistatus != WL_CONNECTED) || (WiFi.RSSI() <= -90) || (WiFi.RSSI() == 0)) && noconnect < MAX_CONNECT) // attempt to connect to WiFi network 3 times
+			connectionAttempts = 0;
+			while (IsWifiNotConnectedOrReachable(G_Wifistatus) && connectionAttempts < MAX_CONNECT) // attempt to connect to WiFi network 3 times
 			{
 				#ifdef Debug_On
-					Serial.print("* Attempt#"); Serial.print(noconnect); Serial.print(" to connect to Network: "); Serial.println(G_ssid); // print the network name (SSID);
+					Serial.print("* Attempt#"); Serial.print(connectionAttempts); Serial.print(" to connect to Network: "); Serial.println(G_SSID); // print the network name (SSID);
 				#endif
-				G_Wifistatus = WiFi.begin(G_ssid, G_pass);     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
+				G_Wifistatus = WiFi.begin(G_SSID, G_PASS);     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
 				delay(2000);                                   // wait 2 seconds for connection:
-				noconnect++;                                   // try-counter
+				connectionAttempts++;                            // try-counter
 			}
-			totalconnect = totalconnect + noconnect;               // count total failed connects     
+			totalConnectionAttempts = totalConnectionAttempts + connectionAttempts;    // count total failed connects     
 
 			if (G_Wifistatus == WL_CONNECTED)
 			{
-				NINAled(GREEN); // Set Green   
+				SetNINA_LED(GREEN); // Set Green   
 				#ifdef Debug_On
-					printWiFiStatus();                        // you're connected now, so print out the status anmd break while loop
+					PrintWiFiStatus();                        // you're connected now, so print out the status anmd break while loop
 				#endif
 				break;
 			}
-			else if ((totalconnect > ESCAPE_CONNECT) || (G_useAP == false)) // quite login service ?
+			else if ((totalConnectionAttempts > ESCAPE_CONNECT) || (G_UseAP == false)) // quite login service ?
 			{
-				NINAled(RED); // Set red 
+				SetNINA_LED(RED); // Set red 
 				#ifdef Debug_On
 					Serial.println("* Connection not possible after too many retries, quit wifi.start process");
 				#endif
@@ -117,24 +116,24 @@ void EasyWiFi::start()
 					Serial.println("* Connection not possible after several retries, opening Access Point");
 				#endif
 				// start direct-Wifi connect to manualy input Wifi credentials
-				NINAled(PURPLE); // no network, : RED
-				listNetworks();                         // load avaialble networks in a list
-				APSetup();
-				NINAled(PURPLE); // start AP, : Purple
-				G_APInputflag = 0;
-				while (!G_APInputflag) // Keep AP open till input is received or till 30 seconds are over
+				SetNINA_LED(PURPLE); // no network, : RED
+				ListNetworks();                         // load avaialble networks in a list
+				AccessPointSetup();
+				SetNINA_LED(PURPLE); // start AP, : Purple
+				G_AP_InputFlag = 0;
+				while (!G_AP_InputFlag) // Keep AP open till input is received or till 30 seconds are over
 				{
 					// Check AP status - new client on or of ?
-					if (G_APStatus != WiFi.status())
+					if (G_AP_Status != WiFi.status())
 					{
-						G_APStatus = WiFi.status();        // it has changed update the variable
-						if (G_APStatus == WL_AP_CONNECTED) // a device has connected to the AP
+						G_AP_Status = WiFi.status();        // it has changed update the variable
+						if (G_AP_Status == WL_AP_CONNECTED) // a device has connected to the AP
 						{
 							#ifdef Debug_On                     
 								Serial.println("Device connected to AP\n");
 							#endif                 
-							NINAled(CYAN); // Client on AP : purple
-							G_DNSRqstcounter = 0; // reset DNS counter
+							SetNINA_LED(CYAN); // Client on AP : purple
+							G_DNS_RequestCounter = 0; // reset DNS counter
 						}
 						else // a device has disconnected from the AP, and we are back in listening mode
 						{
@@ -142,90 +141,93 @@ void EasyWiFi::start()
 								Serial.println("Device disconnected from AP\n");
 							#endif                    
 						}
-					} // end if loop changed G_APStatus                              
-					if (G_APStatus == WL_AP_CONNECTED)  // IF client connected to AP, start DNS and check Webserver
+					} // end if loop changed G_AP_Status                              
+					if (G_AP_Status == WL_AP_CONNECTED)  // IF client connected to AP, start DNS and check Webserver
 					{
-						APDNSScan();          // check DNS requests
-						APWiFiClientCheck();  // check HTTP server Client
+						AccessPointDNSScan();          // check DNS requests
+						AccessPointWiFiClientCheck();  // check HTTP server Client
 					}
 				}
-				G_UDPAP_DNS.stop();        // Close UDP connection
+				G_UDP_AP_DNS.stop();        // Close UDP connection
 				WiFi.end();
 				WiFi.disconnect();
-				NINAled(BLUE); // new credentials : BLUE
+				SetNINA_LED(BLUE); // new credentials : BLUE
 				delay(2000);
 			}
 		} // ever while loop till connected
 	} // end if not connected
 	else
 	{
-		NINAled(GREEN); // Set Green  
+		SetNINA_LED(GREEN); // Set Green  
 		#ifdef Debug_On
 			Serial.println("* Already connected.");                     // you're already connected
-			printWiFiStatus();
+			PrintWiFiStatus();
 		#endif
 	}
 }
 
-// SERIALPRINT Wifi Status - only for debug
-void EasyWiFi::printWiFiStatus()
+// Erase credentials from disk file
+byte EasyWiFi::Erase()
 {
-	#ifdef Debug_On
-	// print the SSID of the network you're attached to:
-		Serial.print("* SSID: ");
-		Serial.print(WiFi.SSID());
-		// print your WiFi shield's IP address:
-		IPAddress ip = WiFi.localIP();
-		Serial.print(" - IP Address: ");
-		Serial.print(ip);
-		// print your WiFi gateway:
-		IPAddress ip2 = WiFi.gatewayIP();
-		Serial.print(" - IP Gateway: ");
-		Serial.print(ip2);
-		// print the received signal strength:
-		long rssi = WiFi.RSSI();
-		Serial.print("- Rssi: ");
-		Serial.print(rssi);
-		Serial.println(" dBm");
-	#endif
-}
-
-// SErase credentials from disk file
-byte EasyWiFi::erase()
-{
-	return Erase_Credentials();
-}
-
-// Set Seed of the Cypher, should be positive
-void EasyWiFi::seed(int value)
-{
-	if (value >= 0)
-		SEED = value;
+	return CredentialsHandler::Erase_Credentials();
 }
 
 // Set Name of AccessPoint
-byte EasyWiFi::apname(char* name)
+byte EasyWiFi::SetAccessPointName(char* name)
 {
-	int t = 0;
-	while (name[t] != 0)
+	int i = 0;
+	while (name[i] != 0)
 	{
-		ACCESPOINTNAME[t] = name[t];
-		t++;
-		if (t >= SSID_BUFFER_SIZE)
+		G_AccessPointName[i] = name[i];
+		i++;
+		if (i >= SSID_BUFFER_SIZE)
 			break;
 	}
-	ACCESPOINTNAME[t] = 0; // close string
-	return t;
+	G_AccessPointName[i] = 0; // close string
+	return i;
+}
+
+// Set Seed of the Cypher, should be positive
+void EasyWiFi::SetSeed(int seed)
+{
+	CredentialsHandler::SetSeed(seed);
+}
+
+/* Set Led indicator active on or off - for low power usage*/
+void EasyWiFi::UseLED(boolean value)
+{
+	G_LED_On = value;
+}
+
+/* Set AP or no AP service*/
+void EasyWiFi::UseAccessPoint(boolean value)
+{
+	G_UseAP = value;
+}
+
+/* Set RGB led on uBlox Module R-G-B , max 128*/
+void EasyWiFi::SetNINA_LED(char r, char g, char b)
+{
+	if (G_LED_On)
+	{
+		// Set LED pin modes to output
+		WiFiDrv::pinMode(25, OUTPUT);
+		WiFiDrv::pinMode(26, OUTPUT);
+		WiFiDrv::pinMode(27, OUTPUT);
+
+		// Set all LED color 
+		WiFiDrv::analogWrite(25, g % 128);    // GREEN
+		WiFiDrv::analogWrite(26, r % 128);    // RED
+		WiFiDrv::analogWrite(27, b % 128);    // BLUE
+	}
 }
 
 // Scan for available Wifi Networks and place is Glovbal SSIDList
-void EasyWiFi::listNetworks()
+void EasyWiFi::ListNetworks()
 {
-	int t;
-	String tmp;
 	// scan for nearby networks:
-	int numSsid = WiFi.scanNetworks();
-	if (numSsid == -1)
+	int foundNetworksAmount = WiFi.scanNetworks();
+	if (foundNetworksAmount == -1)
 	{
 		#ifdef Debug_On        
 			Serial.println("* Couldn't get a Wifi List");
@@ -234,62 +236,76 @@ void EasyWiFi::listNetworks()
 	else
 	{
 		#ifdef Debug_On    
-			Serial.print("* Found total "); Serial.print(numSsid); Serial.println(" Networks.");
+			Serial.print("* Found total "); Serial.print(foundNetworksAmount); Serial.println(" Networks.");
 		#endif      
-		G_ssidCounter = 0;
+		G_SSID_Counter = 0;
+
+		String tempString;
 		// print the network number and name for each network found:
-		for (int thisNet = 0; thisNet < numSsid; thisNet++)
+		for (int thisNetwork = 0; thisNetwork < foundNetworksAmount; thisNetwork++)
 		{
-			tmp = WiFi.SSID(thisNet);
-			if (G_ssidCounter < MAX_SSID) // store only maximum of <SSIDMAX> SSDI's with high dB > -80 && WiFi.RSSI(thisNet)>-81
+			if (G_SSID_Counter < MAX_SSID) // store only maximum of <SSIDMAX> SSDI's with high dB > -80 && WiFi.RSSI(thisNet) > -81
 			{
-				for (t = 0; t < tmp.length(); ++t)
-					G_SSIDList[G_ssidCounter][t] = tmp[t];
-				G_SSIDList[G_ssidCounter][t] = 0;
-				#ifdef Debug_On           
-					Serial.print(G_ssidCounter);
+				// Transfering the MAX_SSID amounts of network names to the global list
+				tempString = WiFi.SSID(thisNetwork);
+				int i;
+				for (i = 0; i < tempString.length(); ++i)
+				{
+					G_SSID_List[G_SSID_Counter][i] = tempString[i];
+				}
+				G_SSID_List[G_SSID_Counter][i] = 0;
+
+				#ifdef Debug_On
+					// print each network
+					Serial.print(G_SSID_Counter);
 					Serial.print(". ");
-					Serial.print(G_SSIDList[G_ssidCounter]);
+					Serial.print(G_SSID_List[G_SSID_Counter]);
 					Serial.print("\t\tSignal: ");
-					Serial.print(WiFi.RSSI(thisNet));
+					Serial.print(WiFi.RSSI(thisNetwork));
 					Serial.println(" dBm");
 					Serial.flush();
-				#endif        
-				G_ssidCounter = G_ssidCounter + 1;
+				#endif
+
+				G_SSID_Counter++;
 			}
 		} // end for list loop
 	}
 }
 
-
 /* Wifi Acces Point Initialisation */
-void EasyWiFi::APSetup()
+void EasyWiFi::AccessPointSetup()
 {
-	int tr = 5;  // 5 tries to setup AP
+	int tries = 5;  // 5 tries to setup AccessPoint
+	
 	#ifdef Debug_On
-		Serial.print("* Creating access point named: "); Serial.println(ACCESPOINTNAME);
+		Serial.print("* Creating access point named: "); Serial.println(G_AccessPointName);
 	#endif
-	G_APip = IPAddress((char)random(11, 172), (char)random(0, 255), (char)random(0, 255), 0x01); // Generate random IP adress in Privit IP range
-	WiFi.end();                                                       // close Wifi - juist to be suire
-	delay(3000);                                                      // Wait 3 seconds
-	WiFi.config(G_APip, G_APip, G_APip, IPAddress(255, 255, 255, 0));       // Setup config
-	while (tr > 0)
+	
+	// Generate Access Point IP Adress and setup config
+	G_AP_IP = IPAddress((char)random(11, 172), (char)random(0, 255), (char)random(0, 255), 0x01); // Generate random IP address in private IP range
+	WiFi.end();																					 // close Wifi - just to be sure
+	delay(3000);																				 // Wait 3 seconds
+	WiFi.config(G_AP_IP, G_AP_IP, G_AP_IP, IPAddress(255, 255, 255, 0));							 // Setup config
+
+	while (tries > 0)
 	{
-		G_APStatus = WiFi.beginAP(ACCESPOINTNAME, ACCESS_POINT_CHANNEL);             // setup AccessPoint
-		if (G_APStatus != WL_AP_LISTENING) // retry
+		G_AP_Status = WiFi.beginAP(G_AccessPointName, ACCESS_POINT_CHANNEL); // setup AccessPoint
+		if (G_AP_Status != WL_AP_LISTENING) // if AccessPoint is not listening -> Retry
 		{
 			#ifdef Debug_On
 				Serial.print(".");
 			#endif        
-			--tr;
-			//WiFi.disconnect();
-			WiFi.config(G_APip, G_APip, G_APip, IPAddress(255, 255, 255, 0));
+			--tries;
+			// Just to be sure, set config again
+			WiFi.config(G_AP_IP, G_AP_IP, G_AP_IP, IPAddress(255, 255, 255, 0));
 		}
 		else
-			break; // break while loop when AP is connected
+			break; // break while loop when AccessPoint is connected/listening
 	}
-	if (tr == 0)
-	{  // not possible to connect in 5 retries
+
+	if (tries == 0)
+	{  
+		// not possible to connect in 5 retries
 		#ifdef Debug_On  
 			Serial.println("* Creating access point failed");
 		#endif     
@@ -297,98 +313,119 @@ void EasyWiFi::APSetup()
 	else
 	{
 		delay(2000);
-		printWiFiStatus();           // you're connected now, so print out the status
-		G_UDPAP_DNS.begin(UDP_PORT);        // start the UDP server
-		G_APWebserver.begin();       // start the AP web server on port 80
+		PrintWiFiStatus();            // you're connected now, so print out the status
+		G_UDP_AP_DNS.begin(UDP_PORT); // start the UDP server
+		G_AP_Webserver.begin();       // start the Access Point web server on port 80
 	}
 }
 
-
-/* DNS Routines via UDP, act on DSN requests on Port 53*/
+/* DNS Routines via UDP, act on DSN requests on Port 53 */
 /* assume wifi UDP connection has been set up */
-void EasyWiFi::APDNSScan()
+void EasyWiFi::AccessPointDNSScan()
 {
-	int t = 0;  // generic loop counter
-	int r, p;  // reply and packet counters
+	int i = 0; // generic loop counter
+	int replyCounter, packetCounter;
 	unsigned int packetSize = 0;
 	unsigned int replySize = 0;
-	byte G_DNSReplybuffer[UDP_PACKET_SIZE];       // buffer to hold the send DNS reply
+	byte G_DNSReplybuffer[UDP_PACKET_SIZE]; // buffer to hold the send DNS reply
 
-	packetSize = G_UDPAP_DNS.parsePacket();
+	packetSize = G_UDP_AP_DNS.parsePacket();
 	if (packetSize) // We've received a packet, read the data from it
 	{
-		G_UDPAP_DNS.read(G_UDPPacketbuffer, packetSize);  // read the packet into the buffer
-		G_APDNSclientip = G_UDPAP_DNS.remoteIP();
-		G_DNSClientport = G_UDPAP_DNS.remotePort();
-		//if ( (G_APDNSclientip != G_APip) && (G_DNSRqstcounter<=DNS_MAX_REQUESTS) )       // skip own requests - ie ntp-pool time requestfrom Wifi module
-		if ((G_APDNSclientip != G_APip))       // skip own requests - ie ntp-pool time requestfrom Wifi module
+		G_UDP_AP_DNS.read(G_UDP_PacketBuffer, packetSize); // read the packet into the buffer
+		G_AP_DNS_CLIENT_IP = G_UDP_AP_DNS.remoteIP();
+		G_DNS_ClientPort = G_UDP_AP_DNS.remotePort();
+
+		//if ( (G_AP_DNS_CLIENT_IP != G_APip) && (G_DNS_RequestCounter<=DNS_MAX_REQUESTS) )       // skip own requests - ie ntp-pool time requestfrom Wifi module
+		if (G_AP_DNS_CLIENT_IP != G_AP_IP) // skip own requests - ie ntp-pool time requestfrom Wifi module
 		{
 			#ifdef Debug_On_X  
 				Serial.print("DNS-packets ("); Serial.print(packetSize);
-				Serial.print(") from "); Serial.print(G_APDNSclientip);
-				Serial.print(" port "); Serial.println(G_DNSClientport);
-				for (t = 0; t < packetSize; ++t)
+				Serial.print(") from "); Serial.print(G_AP_DNS_CLIENT_IP);
+				Serial.print(" port "); Serial.println(G_DNS_ClientPort);
+				for (i = 0; i < packetSize; ++i)
 				{
-					Serial.print(G_UDPPacketbuffer[t], HEX); Serial.print(":");
+					Serial.print(G_UDP_PacketBuffer[i], HEX); Serial.print(":");
 				}
 				Serial.println(" ");
-				for (t = 0; t < packetSize; ++t)
+				for (i = 0; i < packetSize; ++i)
 				{
-					Serial.print((char)G_UDPPacketbuffer[t]);//Serial.print("");
+					Serial.print((char)G_UDP_PacketBuffer[i]);//Serial.print("");
 				}
 				Serial.println("");
-			#endif   
+			#endif
+
 			//Copy Packet ID and IP into DNS header and DNS answer
-			G_DNSReplyheader[0] = G_UDPPacketbuffer[0]; G_DNSReplyheader[1] = G_UDPPacketbuffer[1]; // Copy ID of Packet offset 0 in Header
-			G_DNSReplyanswer[12] = G_APip[0]; G_DNSReplyanswer[13] = G_APip[1]; G_DNSReplyanswer[14] = G_APip[2]; G_DNSReplyanswer[15] = G_APip[3]; // copy AP Ip adress offset 12 in Answer
-			r = 0; // set reply buffer counter
-			p = 12; // set packetbuffer counter @ QUESTION QNAME section
+			G_DNS_ReplyHeader[0] = G_UDP_PacketBuffer[0];
+			G_DNS_ReplyHeader[1] = G_UDP_PacketBuffer[1]; // Copy ID of Packet offset 0 in Header (look at definition)
+			G_DNS_ReplyAnswer[12] = G_AP_IP[0];
+			G_DNS_ReplyAnswer[13] = G_AP_IP[1];
+			G_DNS_ReplyAnswer[14] = G_AP_IP[2];
+			G_DNS_ReplyAnswer[15] = G_AP_IP[3]; // copy Access Point Ip address offset 12 in Answer (look at definition)
+
+			replyCounter = 0;   // set reply buffer counter
+			packetCounter = 12; // set packetbuffer counter @ QUESTION QNAME section
+
 			// copy Header into reply
-			for (t = 0; t < DNS_HEADER_SIZE; ++t)
-				G_DNSReplybuffer[r++] = G_DNSReplyheader[t];
-			// copy Qusetion into reply:  Name labels till octet=0x00
-			while (G_UDPPacketbuffer[p] != 0)
-				G_DNSReplybuffer[r++] = G_UDPPacketbuffer[p++];
+			for (i = 0; i < DNS_HEADER_SIZE; ++i)
+			{
+				G_DNSReplybuffer[replyCounter++] = G_DNS_ReplyHeader[i];
+			}
+
+			// copy Qusetion into reply: Name labels until octet=0x00
+			while (G_UDP_PacketBuffer[packetCounter] != 0)
+			{
+				G_DNSReplybuffer[replyCounter++] = G_UDP_PacketBuffer[packetCounter++];
+			}
+
 			// copy end of question plus Qtype and Qclass 5 octets
-			for (t = 0; t < 5; ++t)
-				G_DNSReplybuffer[r++] = G_UDPPacketbuffer[p++];
-			//copy Answer into reply
-			for (t = 0; t < DNS_ANSWER_SIZE; ++t)
-				G_DNSReplybuffer[r++] = G_DNSReplyanswer[t];
-			replySize = r;
+			for (i = 0; i < 5; ++i)
+			{
+				G_DNSReplybuffer[replyCounter++] = G_UDP_PacketBuffer[packetCounter++];
+			}
+
+			// copy Answer into reply
+			for (i = 0; i < DNS_ANSWER_SIZE; ++i)
+			{
+				G_DNSReplybuffer[replyCounter++] = G_DNS_ReplyAnswer[i];
+			}
+
+			replySize = replyCounter;
+
 			#ifdef Debug_On_X  
 				Serial.print("* DNS-Reply ("); Serial.print(replySize);
 				Serial.print(") from "); Serial.print(G_APip);
 				Serial.print(" port "); Serial.println(UDP_PORT);
-				for (t = 0; t < replySize; ++t)
+				for (i = 0; i < replySize; ++i)
 				{
-					Serial.print(G_DNSReplybuffer[t], HEX); Serial.print(":");
+					Serial.print(G_DNSReplybuffer[i], HEX); Serial.print(":");
 				}
 				Serial.println(" ");
-				for (t = 0; t < replySize; ++t)
+				for (i = 0; i < replySize; ++i)
 				{
-					Serial.print((char)G_DNSReplybuffer[t]);//Serial.print("");
+					Serial.print((char)G_DNSReplybuffer[i]);//Serial.print("");
 				}
 				Serial.println("");
-			#endif      
+			#endif     
+
 			// Send DSN UDP packet
-			G_UDPAP_DNS.beginPacket(G_APDNSclientip, G_DNSClientport); //reply DNSquestion
-			G_UDPAP_DNS.write(G_DNSReplybuffer, replySize);
-			G_UDPAP_DNS.endPacket();
-			G_DNSRqstcounter++;
+			G_UDP_AP_DNS.beginPacket(G_AP_DNS_CLIENT_IP, G_DNS_ClientPort); //reply DNS question
+			G_UDP_AP_DNS.write(G_DNSReplybuffer, replySize);
+			G_UDP_AP_DNS.endPacket();
+			G_DNS_RequestCounter++;
+
 		} // end loop correct IP
 	} // end loop received packet
 }
 
-
 // Check the AP wifi Client Responses and read the inputs on the main AP web-page.
-void EasyWiFi::APWiFiClientCheck()
+void EasyWiFi::AccessPointWiFiClientCheck()
 {
 	String Postline = "";                   // make a String to hold incoming POST-Data
 	String currentLine = "";                // make a String to hold incoming data from the client
 	char c;                                 // Character read buffer
 	int t, u, v, pos1, pos2;                    // loop counter
-	WiFiClient client = G_APWebserver.available();  // listen for incoming clients
+	WiFiClient client = G_AP_Webserver.available();  // listen for incoming clients
 	if (client) // if you get a client,
 	{
 		#ifdef Debug_On     
@@ -419,9 +456,9 @@ void EasyWiFi::APWiFiClientCheck()
 						client.print("<p style=\"font-family:verdana; color:GhostWhite\">&nbsp<font size=3> l </font><font size=4> l </font><font size=5> | </font><font size=4> l </font><font size=3> l </font><font size=4> l </font><font size=5> | </font><font size=4> l </font><font size=3> l </font> <br>");
 						client.print("<font size=5>Arduino</font>  <br><font size=5>"); client.print(WiFi.SSID()); client.println("</font>");
 						client.print("<p style=\"font-family:verdana; color:Gainsboro\">");
-						for (t = 0; t < G_ssidCounter; t++)
+						for (t = 0; t < G_SSID_Counter; t++)
 						{
-							client.print(t); client.print(". ["); client.print(G_SSIDList[t]); client.print("]<br>");
+							client.print(t); client.print(". ["); client.print(G_SSID_List[t]); client.print("]<br>");
 						}
 						client.println("</font></p>");
 						client.print("<p style=\"font-family:verdana; color:Gainsboro\">Enter Wifi-Ssid (Number or name) and Pass:<br>");
@@ -480,16 +517,16 @@ void EasyWiFi::APWiFiClientCheck()
 									if (pos2 - pos1 == 7)
 									{
 										u = (currentLine[pos1] - 48);
-										if (u > G_ssidCounter)
+										if (u > G_SSID_Counter)
 											u = 0;                                 // one digit - convert to max index
-										for (v = 0; G_SSIDList[u][v] != 0; v++) G_ssid[v] = G_SSIDList[u][v]; G_ssid[v] = 0;          // copy list name to ssid           
+										for (v = 0; G_SSID_List[u][v] != 0; v++) G_SSID[v] = G_SSID_List[u][v]; G_SSID[v] = 0;          // copy list name to ssid           
 									}
 									else
 									{
-										u = 0; for (v = pos1; v < (pos2 - 6); v++) G_ssid[u++] = currentLine[v]; G_ssid[u] = 0; // if not one digit, copy input name to ssid
+										u = 0; for (v = pos1; v < (pos2 - 6); v++) G_SSID[u++] = currentLine[v]; G_SSID[u] = 0; // if not one digit, copy input name to ssid
 									}
-									u = 0; for (v = pos2; v < (t - 7); v++) G_pass[u++] = currentLine[v]; G_pass[u] = 0;
-									Write_Credentials(G_ssid, sizeof(G_ssid), G_pass, sizeof(G_pass)); // write credentials to flash 
+									u = 0; for (v = pos2; v < (t - 7); v++) G_PASS[u++] = currentLine[v]; G_PASS[u] = 0;
+									Write_Credentials(G_SSID, sizeof(G_SSID), G_PASS, sizeof(G_PASS)); // write credentials to flash 
 								}
 								else
 								{
@@ -499,10 +536,10 @@ void EasyWiFi::APWiFiClientCheck()
 								}
 								#ifdef Debug_On                        
 									Serial.print("\n* AP client input found: ");
-									Serial.print(G_ssid); Serial.print(","); Serial.println("******");
+									Serial.print(G_SSID); Serial.print(","); Serial.println("******");
 								#endif                     
-								// copy inbpouts to G_ssid and G_pass
-								G_APInputflag = 1;                             // flag Ap input
+								// copy inbpouts to G_SSID and G_PASS
+								G_AP_InputFlag = 1;                             // flag Ap input
 								break;
 							}
 						}
@@ -550,9 +587,9 @@ void EasyWiFi::APWiFiClientCheck()
 						  client.println("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"); // metaview
 						  client.println("<body style=\"background-color:black\">"); // set color CCS HTML5 style
 						  client.print( "<h2 style=\"font-family:verdana; color:GoldenRod\">Access Router ");client.print(WiFi.SSID());client.println("</h2>");
-						  client.print("<p style=\"font-family:verdana; color:indianred\">Authentication failed<br>");
+						  client.print("<packetCounter style=\"font-family:verdana; color:indianred\">Authentication failed<br>");
 						  client.print("<meta http-equiv=\"refresh\" content=\"4;url=/\" />");
-						  G_DNSRqstcounter=0;
+						  G_DNS_RequestCounter=0;
 						  Serial.println("**Reset");
 						  break;
 						}
@@ -582,201 +619,33 @@ void EasyWiFi::APWiFiClientCheck()
 	} // end If Client
 }
 
-
-/********* File Routines **************/
-
-/* Read credentials ID,pass to Flash file , Comma separated style*/
-byte EasyWiFi::Read_Credentials(char* buf1, char* buf2)
+// SERIALPRINT Wifi Status - only for debug
+void EasyWiFi::PrintWiFiStatus()
 {
-	int u, t, c = 0;
-	char buf[68], comma = 1, zero = 0;
-	char bufc[68];
-	WiFiStorageFile file = WiFiStorage.open(CREDENTIAL_FILE);
-	if (file)
-	{
-		file.seek(0);
-		if (file.available()) // read file buffer into memory, max size is 64 bytes for 2 char-strings
-		{
-			c = file.read(buf, 68);  //Serial.write(buf, c);
-		}
-		if (c != 0)
-		{
-			t = 0;
-			u = 0;
-			while (buf[t] != comma) // read ID till comma
-			{
-				bufc[u++] = buf[t++];
-				if (u > 31)
-					break;
-			}
-			bufc[u] = 0;
-			SimpleDecypher(bufc, buf1);
-			u = 0;
-			t++;                // move to second part: pass
-			while (buf[t] != zero) // read till zero
-			{
-				bufc[u++] = buf[t++];
-				if (u > 31)
-					break;
-			}
-			bufc[u] = 0;
-			SimpleDecypher(bufc, buf2);
-		}
-		#ifdef Debug_On
-			Serial.print("* Read Credentials : ");
-			Serial.println(c);
-		#endif    
-		file.close(); return(c);
-	}
-	else
-	{
-		#ifdef Debug_On
-			Serial.println("* Cant read Credentials :");
-		#endif    
-		file.close(); return(0);
-	}
+#ifdef Debug_On
+	// print the SSID of the network you're attached to:
+	Serial.print("* SSID: ");
+	Serial.print(WiFi.SSID());
+	// print your WiFi shield's IP address:
+	IPAddress ip = WiFi.localIP();
+	Serial.print(" - IP Address: ");
+	Serial.print(ip);
+	// print your WiFi gateway:
+	IPAddress ip2 = WiFi.gatewayIP();
+	Serial.print(" - IP Gateway: ");
+	Serial.print(ip2);
+	// print the received signal strength:
+	long rssi = WiFi.RSSI();
+	Serial.print("- Rssi: ");
+	Serial.print(rssi);
+	Serial.println(" dBm");
+#endif
 }
 
-/* Write credentials ID,pass to Flash file , Comma separated style*/
-byte EasyWiFi::Write_Credentials(char* buf1, int size1, char* buf2, int size2)
+bool EasyWiFi::IsWifiNotConnectedOrReachable(int wifiStatus)
 {
-	int c = 0;
-	char comma = 1, zero = 0;
-	char buf[32];
-	WiFiStorageFile file = WiFiStorage.open(CREDENTIAL_FILE);
-	if (file)
-	{
-		file.erase();     // erase content bnefore writing
-	}
-	SimpleCypher(buf1, buf);
-	c = c + file.write(buf, size1);
-	file.write(&comma, 1);
-	c++;
-	SimpleCypher(buf2, buf);
-	c = c + file.write(buf, size2);
-	file.write(&zero, 1);
-	c++;
-	if (c != 0)
-	{
-		#ifdef Debug_On
-			Serial.print("* Written Credentials : ");
-			Serial.println(c);
-		#endif
-		file.close();
-		return(c);
-	}
-	else
-	{
-		#ifdef Debug_On
-			Serial.println("* Cant write Credentials");
-		#endif  
-		file.close();
-		return(0);
-	}
-}
-
-/* Erase credentials in flkash file */
-byte EasyWiFi::Erase_Credentials()
-{
-	char empty[16] = "0empty0o0empty0";
-	WiFiStorageFile file = WiFiStorage.open(CREDENTIAL_FILE);
-	if (file)
-	{
-		file.seek(0);
-		file.write(empty, 16); //overwrite flash
-		file.erase();
-		#ifdef Debug_On
-			Serial.println("* Erased Credentialsfile : ");
-		#endif  
-		file.close(); return(1);
-	}
-	else
-	{
-		#ifdef Debug_On
-			Serial.println("* Could not erased Credentialsfile : ");
-		#endif  
-		file.close(); return(0);
-	}
-}
-
-/* Check credentials file */
-byte EasyWiFi::Check_Credentials()
-{
-	WiFiStorageFile file = WiFiStorage.open(CREDENTIAL_FILE);
-	if (file)
-	{
-		#ifdef Debug_On
-			Serial.println("* Found Credentialsfile : ");
-		#endif  
-		file.close(); return(1);
-	}
-	else
-	{
-		#ifdef Debug_On
-			Serial.println("* Could not find Credentialsfile : ");
-		#endif  
-		file.close(); return(0);
-	}
+	return (wifiStatus != WL_CONNECTED) || (WiFi.RSSI() <= -90) || (WiFi.RSSI() == 0);
 }
 
 
-/* Simple Cyphering the text code */
-void EasyWiFi::SimpleCypher(char* textin, char* textout)
-{
-	int c, t = 0;
-	while (textin[t] != 0)
-	{
-		textout[t] = textin[t] + SEED % 17 - t % 7;
-		t++;
-	}
-	textout[t] = 0;
-	#ifdef Debug_On
-		// Serial.print("* Cyphered ");Serial.print(t);Serial.print(" - ");Serial.println(textout);
-	#endif
-}
-
-/* Simple DeCyphering the text code */
-void EasyWiFi::SimpleDecypher(char* textin, char* textout)
-{
-	int c, t = 0;
-	while (textin[t] != 0)
-	{
-		textout[t] = textin[t] - SEED % 17 + t % 7;
-		t++;
-	}
-	textout[t] = 0;
-	#ifdef Debug_On
-		// Serial.print("* Decyphered ");Serial.print(t);Serial.print(" - ");Serial.println(textout);
-	#endif
-}
-
-
-/* Set Led indicator active on or off - for low power usage*/
-void EasyWiFi::led(boolean value)
-{
-	G_ledon = value;
-}
-
-/* Set AP or no AP service*/
-void EasyWiFi::useAP(boolean value)
-{
-	G_useAP = value;
-}
-
-/* Set RGB led on uBlox Module R-G-B , max 128*/
-void EasyWiFi::NINAled(char r, char g, char b)
-{
-	if (G_ledon)
-	{
-		// Set LED pin modes to output
-		WiFiDrv::pinMode(25, OUTPUT);
-		WiFiDrv::pinMode(26, OUTPUT);
-		WiFiDrv::pinMode(27, OUTPUT);
-
-		// Set all LED color 
-		WiFiDrv::analogWrite(25, g % 128);    // GREEN
-		WiFiDrv::analogWrite(26, r % 128);    // RED
-		WiFiDrv::analogWrite(27, b % 128);    // BLUE
-	}
-}
 

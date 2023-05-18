@@ -64,107 +64,88 @@ EasyWiFi::EasyWiFi() {}
 // Login to local network  //
 void EasyWiFi::Start()
 {
-	int  connectionAttempts = 0, totalConnectionAttempts = 0;;
-	WiFi.disconnect();
-	delay(2000);
-	SetNINA_LED(BLUE); // Starting to connect: Set Blue  
-	int G_Wifistatus = WiFi.status();
-	if (IsWifiNotConnectedOrReachable(G_Wifistatus)) // check if connected
-	{
-		// Read SSId File
-		if (CredentialsHandler::Read_Credentials(G_SSID, G_PASS) == 0) // read credentials, if not possible, re-use the old-already loaded credentials
-		{
-			SetNINA_LED(ORANGE); // no credentials found SET YELLOW/ORANGE
-			#ifdef Debug_On
-				Serial.println("* Using old credentials");
-			#endif
-		}
-
-		while (IsWifiNotConnectedOrReachable(G_Wifistatus)) // attempt to connect to WiFi network:
-		{
-			connectionAttempts = 0;
-			while (IsWifiNotConnectedOrReachable(G_Wifistatus) && connectionAttempts < MAX_CONNECT) // attempt to connect to WiFi network 3 times
-			{
-				#ifdef Debug_On
-					Serial.print("* Attempt#"); Serial.print(connectionAttempts); Serial.print(" to connect to Network: "); Serial.println(G_SSID); // print the network name (SSID);
-				#endif
-				G_Wifistatus = WiFi.begin(G_SSID, G_PASS);     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-				delay(2000);                                   // wait 2 seconds for connection:
-				connectionAttempts++;                            // try-counter
-			}
-			totalConnectionAttempts = totalConnectionAttempts + connectionAttempts;    // count total failed connects     
-
-			if (G_Wifistatus == WL_CONNECTED)
-			{
-				SetNINA_LED(GREEN); // Set Green   
-				#ifdef Debug_On
-					PrintWiFiStatus();                        // you're connected now, so print out the status anmd break while loop
-				#endif
-				break;
-			}
-			else if ((totalConnectionAttempts > ESCAPE_CONNECT) || (G_UseAP == false)) // quite login service ?
-			{
-				SetNINA_LED(RED); // Set red 
-				#ifdef Debug_On
-					Serial.println("* Connection not possible after too many retries, quit wifi.start process");
-				#endif
-				break;
-			}
-			else // no connection possible : exit without server started
-			{
-				#ifdef Debug_On
-					Serial.println("* Connection not possible after several retries, opening Access Point");
-				#endif
-				// start direct-Wifi connect to manualy input Wifi credentials
-				SetNINA_LED(PURPLE); // no network, : RED
-				ListNetworks();                         // load avaialble networks in a list
-				AccessPointSetup();
-				SetNINA_LED(PURPLE); // start AP, : Purple
-				G_AP_InputFlag = 0;
-				while (!G_AP_InputFlag) // Keep AP open till input is received or till 30 seconds are over
-				{
-					// Check AP status - new client on or of ?
-					if (G_AP_Status != WiFi.status())
-					{
-						G_AP_Status = WiFi.status();        // it has changed update the variable
-						if (G_AP_Status == WL_AP_CONNECTED) // a device has connected to the AP
-						{
-							#ifdef Debug_On                     
-								Serial.println("Device connected to AP\n");
-							#endif                 
-							SetNINA_LED(CYAN); // Client on AP : purple
-							G_DNS_RequestCounter = 0; // reset DNS counter
-						}
-						else // a device has disconnected from the AP, and we are back in listening mode
-						{
-							#ifdef Debug_On                  
-								Serial.println("Device disconnected from AP\n");
-							#endif                    
-						}
-					} // end if loop changed G_AP_Status                              
-					if (G_AP_Status == WL_AP_CONNECTED)  // IF client connected to AP, start DNS and check Webserver
-					{
-						AccessPointDNSScan();          // check DNS requests
-						AccessPointWiFiClientCheck();  // check HTTP server Client
-					}
-				}
-				G_UDP_AP_DNS.stop();        // Close UDP connection
-				WiFi.end();
-				WiFi.disconnect();
-				SetNINA_LED(BLUE); // new credentials : BLUE
-				delay(2000);
-			}
-		} // ever while loop till connected
-	} // end if not connected
-	else
+	// Early exit if already connected
+	bool alreadyConnected = !IsWifiNotConnectedOrReachable(WiFi.status());
+	if (alreadyConnected)
 	{
 		SetNINA_LED(GREEN); // Set Green  
 		#ifdef Debug_On
-			Serial.println("* Already connected.");                     // you're already connected
+			Serial.println("* Already connected."); // you're already connected
 			PrintWiFiStatus();
 		#endif
+		return;
 	}
+
+	// Read saved credentials from file
+	const byte READ_FAILED = 0;
+	if (CredentialsHandler::Read_Credentials(G_SSID, G_PASS) == READ_FAILED) // if no success use hardcoded credentials
+	{
+		SetNINA_LED(ORANGE); // no credentials found SET ORANGE
+		#ifdef Debug_On
+			Serial.println("* Using hardcoded credentials");
+		#endif
+	}
+
+	// Start while loop for finding a connection 
+	SetNINA_LED(BLUE); // Starting to connect: Set Blue  
+	int totalConnectionAttempts = 0;
+	while (IsWifiNotConnectedOrReachable(WiFi.status())) 
+	{
+		// Attempt to connect to WiFi network:
+		//totalConnectionAttempts += TryToConnectToWifiWithCredentials();   // count total failed connects     
+
+		// If connected, exit while loop
+		if (WiFi.status() == WL_CONNECTED)
+		{
+			SetNINA_LED(GREEN); // Set Green   
+			#ifdef Debug_On
+				PrintWiFiStatus(); // you're connected now, so print out the status and break while loop
+			#endif
+			break;
+		}
+		
+		if ((totalConnectionAttempts > ESCAPE_CONNECT) || (G_UseAP == false)) // quite login service?
+		{
+			SetNINA_LED(RED); // Set red 
+			#ifdef Debug_On
+				Serial.println("* Connection not possible after too many retries, quit wifi.start process");
+			#endif
+			break;
+		}
+
+		// No connection possible opening Access Point		
+		#ifdef Debug_On
+			Serial.println("* Connection not possible after several retries, opening Access Point");
+		#endif
+
+		// start direct-Wifi connect to manualy input Wifi credentials
+		SetNINA_LED(RED); // no network, : RED
+		ListNetworks();   // load avaialble networks in a list
+		AccessPointSetup();
+		SetNINA_LED(PURPLE); // start AP, : Purple
+
+		G_AP_InputFlag = 0;
+		while (!G_AP_InputFlag) // Keep AP open until input is received or until 30 seconds are over
+		{
+			UpdateDeviceConnectedStatus();
+
+			if (G_AP_Status == WL_AP_CONNECTED)  // IF client connected to AP, start DNS and check Webserver
+			{
+				AccessPointDNSScan();          // check DNS requests
+				AccessPointWiFiClientCheck_Test();  // check HTTP server Client
+			}
+		}
+		G_UDP_AP_DNS.stop(); // Close UDP connection
+		WiFi.end();
+		WiFi.disconnect();
+		SetNINA_LED(BLUE); // new credentials : BLUE
+		delay(2000);
+		
+	} //while loop until connected
+
 }
+
+
 
 // Erase credentials from disk file
 byte EasyWiFi::Erase()
@@ -272,7 +253,8 @@ void EasyWiFi::ListNetworks()
 	}
 }
 
-/* Wifi Acces Point Initialisation */
+/* Wifi Access Point Initialisation */
+/* Starting Webserver and UDP Server on success */
 void EasyWiFi::AccessPointSetup()
 {
 	int tries = 5;  // 5 tries to setup AccessPoint
@@ -418,28 +400,33 @@ void EasyWiFi::AccessPointDNSScan()
 	} // end loop received packet
 }
 
-// Check the AP wifi Client Responses and read the inputs on the main AP web-page.
+// Check the Access Point wifi Client Responses and read the inputs on the main Access Point web-page.
 void EasyWiFi::AccessPointWiFiClientCheck()
 {
-	String Postline = "";                   // make a String to hold incoming POST-Data
-	String currentLine = "";                // make a String to hold incoming data from the client
-	char c;                                 // Character read buffer
-	int t, u, v, pos1, pos2;                    // loop counter
+	String PostLine = "";     // make a String to hold incoming POST-Data
+	String currentLine = "";  // make a String to hold incoming data from the client
+	char charBuffer;          // Character read buffer
+	int t, u, v, pos1, pos2;  // loop counter
+
 	WiFiClient client = G_AP_Webserver.available();  // listen for incoming clients
 	if (client) // if you get a client,
 	{
 		#ifdef Debug_On     
-			Serial.println("* New AP webclient");        // print a message out the serial port
-		#endif    
+			Serial.println("* New Access Point webclient");
+		#endif
+
 		while (client.connected()) // loop while the client's connected
 		{
 			if (client.available()) // if there's bytes to read from the client,
 			{
-				c = client.read();               // read a byte, then
+				charBuffer = client.read(); // read a byte, then
+
 				#ifdef Debug_On  
-					Serial.write(c);                 // print it out the serial monitor
-				#endif          
-				if (c == '\n') // if the byte is a newline character
+					// print it out the serial monitor
+					Serial.write(charBuffer);                 
+				#endif
+
+				if (charBuffer == '\n') // if the byte is a newline character
 				{
 					// if the current line is blank, you got two newline characters in a row.
 					// that's the end of the client HTTP request, so send a response:
@@ -479,54 +466,88 @@ void EasyWiFi::AccessPointWiFiClientCheck()
 						currentLine = "";
 					}
 				}
-				else if (c != '\r') // if you got anything else but a carriage return character,
+				else if (charBuffer != '\r') // if you got anything else but a carriage return character,
 				{
-					currentLine += c;      // add it to the end of the currentLine
+					currentLine += charBuffer;      // add it to the end of the currentLine
 				}
 				// Check to see if the client request was a post on our checkpass.php
 				if (currentLine.endsWith("POST /checkpass.php"))
 				{
 					#ifdef Debug_On            
-						Serial.println("* Found APServer POST");
-					#endif                
+						Serial.println("* Found AP Server POST");
+					#endif        
+
 					currentLine = "";
 					while (client.connected()) // loop while the client's connected
 					{
 						if (client.available()) // if there's bytes to read from the client,
 						{
-							c = client.read();                        // read a byte, then
+							charBuffer = client.read();    // read a byte, then
+
 							#ifdef Debug_On_X                      
-								Serial.write(c);                          // print it out the serial monitor
-							#endif                   
-							if (c == '\n') // if the byte is a newline character
+								Serial.write(charBuffer);  // print it out the serial monitor
+							#endif    
+
+							if (charBuffer == '\n') // if the byte is a newline character
 							{
 								//if (currentLine.length() == 0) break; // no lenght :  end of data request
 								currentLine = "";                      // if you got a newline, then clear currentLine:
 							}
-							else if (c != '\r')
-								currentLine += c;     // if you got anything else but a carriage return character, add to string
+							else if (charBuffer != '\r')
+							{
+								currentLine += charBuffer;     // if you got anything else but a carriage return character, add to string
+							}
+
 							if (currentLine.endsWith("XXID="))
+							{
 								pos1 = currentLine.length();
+							}
+
 							if (currentLine.endsWith("&XXPS="))
+							{
 								pos2 = currentLine.length();
+							}
+
 							if (currentLine.endsWith("&action")) // Check read line on "data=" start that ends with "&action"
 							{
 								t = currentLine.length();
+
 								if (t < 78)
 								{
 									if (pos2 - pos1 == 7)
 									{
 										u = (currentLine[pos1] - 48);
 										if (u > G_SSID_Counter)
-											u = 0;                                 // one digit - convert to max index
-										for (v = 0; G_SSID_List[u][v] != 0; v++) G_SSID[v] = G_SSID_List[u][v]; G_SSID[v] = 0;          // copy list name to ssid           
+										{
+											u = 0; // one digit - convert to max index
+										}
+
+										// copy list name to ssid
+										for (v = 0; G_SSID_List[u][v] != 0; v++)
+										{
+											G_SSID[v] = G_SSID_List[u][v]; 
+											G_SSID[v] = 0;
+										}
 									}
 									else
 									{
-										u = 0; for (v = pos1; v < (pos2 - 6); v++) G_SSID[u++] = currentLine[v]; G_SSID[u] = 0; // if not one digit, copy input name to ssid
+										u = 0;
+										// if not one digit, copy input name to ssid
+										for (v = pos1; v < (pos2 - 6); v++)
+										{
+											G_SSID[u++] = currentLine[v];
+										}
+										G_SSID[u] = 0;
 									}
-									u = 0; for (v = pos2; v < (t - 7); v++) G_PASS[u++] = currentLine[v]; G_PASS[u] = 0;
-									Write_Credentials(G_SSID, sizeof(G_SSID), G_PASS, sizeof(G_PASS)); // write credentials to flash 
+
+									u = 0;
+									for (v = pos2; v < (t - 7); v++)
+									{
+										G_PASS[u++] = currentLine[v];
+									}
+									G_PASS[u] = 0;
+
+									CredentialsHandler::Write_Credentials(G_SSID, sizeof(G_SSID), G_PASS, sizeof(G_PASS)); // write credentials to flash 
 								}
 								else
 								{
@@ -534,12 +555,14 @@ void EasyWiFi::AccessPointWiFiClientCheck()
 										Serial.print("* Invalid input from AP Client"); Serial.println(currentLine);
 									#endif                            
 								}
+
 								#ifdef Debug_On                        
 									Serial.print("\n* AP client input found: ");
 									Serial.print(G_SSID); Serial.print(","); Serial.println("******");
-								#endif                     
-								// copy inbpouts to G_SSID and G_PASS
-								G_AP_InputFlag = 1;                             // flag Ap input
+								#endif     
+
+								// copy inputs to G_SSID and G_PASS
+								G_AP_InputFlag = 1; // flag AP input
 								break;
 							}
 						}
@@ -619,6 +642,329 @@ void EasyWiFi::AccessPointWiFiClientCheck()
 	} // end If Client
 }
 
+// Check the Access Point wifi Client Responses and read the inputs on the main Access Point web-page.
+void EasyWiFi::AccessPointWiFiClientCheck_Test()
+{
+	String PostLine = "";     // make a String to hold incoming POST-Data
+	String currentLine = "";  // make a String to hold incoming data from the client
+	char charBuffer;          // Character read buffer
+	int t, u, v, pos1, pos2;  // loop counter
+
+	WiFiClient client = G_AP_Webserver.available();  // listen for incoming clients
+	if (client) // if you get a client,
+	{
+		#ifdef Debug_On     
+			Serial.println("* New Access Point webclient");
+		#endif
+
+		while (client.connected()) // loop while the client's connected
+		{
+			if (client.available()) // if there's bytes to read from the client,
+			{
+				processRequest(client);
+				break;
+//				charBuffer = client.read(); // read a byte, then
+//
+//#ifdef Debug_On  
+//				// print it out the serial monitor
+//				Serial.write(charBuffer);
+//#endif
+//
+//				if (charBuffer == '\n') // if the byte is a newline character
+//				{
+//					// if the current line is blank, you got two newline characters in a row.
+//					// that's the end of the client HTTP request, so send a response:
+//					if (currentLine.length() == 0)
+//					{
+//						
+//					}
+//					else // if you got a newline, then clear currentLine:
+//					{
+//						currentLine = "";
+//					}
+//				}
+//				else if (charBuffer != '\r') // if you got anything else but a carriage return character,
+//				{
+//					currentLine += charBuffer;      // add it to the end of the currentLine
+//				}
+			} // end loop client data avaialbe    
+		} // end while loop client connected
+
+		// close the connection:
+		client.stop();
+		#ifdef Debug_On     
+			Serial.println("* AP webclient disconnected");
+		#endif
+	} // end If Client
+}
+
+void EasyWiFi::processRequest(WiFiClient client) {
+	// Read the request from the client
+	String request = client.readStringUntil('\r');
+	client.flush();
+
+	#ifdef Debug_On     
+		Serial.println("Process request");
+	#endif
+
+	// Handle the request
+	if (request.indexOf("/list_networks") != -1)
+	{
+		#ifdef Debug_On     
+			Serial.println("* Send network list");
+		#endif
+		// Send the list of Wi-Fi networks as a web page
+		sendNetworkList(client);
+	}
+	else if (request.indexOf("/enterPassword") != -1)
+	{
+		#ifdef Debug_On     
+			Serial.println("* sendEnterWifiPasswordPage");
+		#endif
+		// Process the network selection and password entry
+		sendEnterWifiPasswordPage(client, request);
+	}
+	else if (request.indexOf("POST /connect") != -1)
+	{
+		#ifdef Debug_On     
+			Serial.println("* handleProvidedWifiCredentials");
+		#endif
+		// Process the connection form submission
+		handleProvidedWifiCredentials(client, request);
+	}
+	else
+	{
+		#ifdef Debug_On     
+			Serial.println("* Send default page");
+		#endif
+		// Send the default web page
+		sendStartPage(client);
+	}
+}
+
+void EasyWiFi::handleProvidedWifiCredentials(WiFiClient client, String request) {
+	// Extract the network SSID and password from the request body
+	String requestBody = request.substring(request.indexOf("\r\n\r\n") + 4);
+	String networkName = getValueFromRequest(requestBody, "network");
+	String password = getValueFromRequest(requestBody, "password");
+
+	// Attempt to connect to the network
+	Serial.print("* Entered Wifi PW: ");
+	Serial.println(password.c_str());
+
+	Serial.print("* Entered Wifi SSID: ");
+	Serial.println(networkName.c_str());
+
+
+	// Connect to the network using the provided SSID and password
+	boolean connected = connectToNetwork(networkName, password);
+
+	//G_SSID = networkName;
+	//TryToConnectToWifiWithCredentials()
+
+	// Send the response back to the client
+	client.println("HTTP/1.1 200 OK");
+	client.println("Content-Type: text/html");
+	client.println();
+
+	client.println("<html>");
+	client.println("<head><title>Connection Status</title></head>");
+	client.println("<meta charset='UTF-8'>");
+	client.println("<meta name='viewport' content='width=device-width,initial-scale=1'>");
+	client.println("<body>");
+
+	if (connected) {
+		client.println("<h2>Network Connection Successful</h2>");
+		// Additional actions or information for a successful connection
+	}
+	else {
+		client.println("<h2>Network Connection Failed</h2>");
+		client.println("<p>Failed to connect to network: " + networkName + "</p>");
+		client.println("<button onclick=\"location.href='/networklist'\">Select network and try again</button>");
+	}
+
+	client.println("</body>");
+	client.println("</html>");
+	client.println();
+}
+
+String EasyWiFi::getValueFromRequest(String requestBody, String key) {
+	String value = "";
+	int keyIndex = requestBody.indexOf(key + "=");
+	if (keyIndex != -1) {
+		int valueIndex = keyIndex + key.length() + 1;
+		int endIndex = requestBody.indexOf("&", valueIndex);
+		if (endIndex == -1) {
+			endIndex = requestBody.length();
+		}
+		value = requestBody.substring(valueIndex, endIndex);
+		value = urlDecode(value);
+	}
+	return value;
+}
+
+String EasyWiFi::urlDecode(String str) {
+	String decodedString = "";
+	char temp[3] = { 0 };
+	unsigned int len = str.length();
+	unsigned int i = 0;
+	while (i < len) {
+		char decodedChar;
+		if (str.charAt(i) == '%') {
+			temp[0] = str.charAt(i + 1);
+			temp[1] = str.charAt(i + 2);
+			decodedChar = strtol(temp, NULL, 16);
+			i += 2;
+		}
+		else if (str.charAt(i) == '+') {
+			decodedChar = ' ';
+		}
+		else {
+			decodedChar = str.charAt(i);
+		}
+		i++;
+		decodedString += decodedChar;
+	}
+	return decodedString;
+}
+
+boolean EasyWiFi::connectToNetwork(String networkName, String password) {
+	int attempts = 4;
+	int delayInSeconds = 2;
+	boolean connected = false;
+
+	for (int i = 0; i < attempts; i++)
+	{
+		WiFi.begin(networkName.c_str(), password.c_str());
+		delay(delayInSeconds * 1000);
+		if (WiFi.status() == WL_CONNECTED)
+		{
+			connected = true;
+			break;
+		}
+	}
+
+	return connected;
+}
+
+void EasyWiFi::sendStartPage(WiFiClient client) {
+	// Send the HTTP header
+	client.println("HTTP/1.1 200 OK");
+	client.println("Content-type:text/html");
+	client.println();
+
+	// Send the default web page
+	client.println("<html>");
+	client.println("<head><title>Welcome</title></head>");
+	client.println("<meta charset='UTF-8'>");
+	client.println("<meta name='viewport' content='width=device-width,initial-scale=1'>");
+	client.println("<body>");
+	client.println("<h1>Welcome to the Arduino IoT Web Server</h1>");
+	client.println("<p>Please select your network:</p>");
+	client.println("<a href=\"/list_networks\">Network Selection</a>");
+	client.println("</body>");
+	client.println("</html>");
+	// The HTTP response ends with another blank line:
+	client.println();
+}
+
+void EasyWiFi::sendNetworkList(WiFiClient client) {
+	// Send the HTTP header
+	client.println("HTTP/1.1 200 OK");
+	client.println("Content-Type: text/html");
+	client.println();
+
+	// Send the HTML page
+	client.println("<html>");
+	client.println("<head><title>Select your network</title></head>");
+	client.println("<meta charset='UTF-8'>");
+	client.println("<meta name='viewport' content='width=device-width,initial-scale=1'>");
+	client.println("<body>");
+	client.println("<h2>Select your network:</h2>");
+
+	// Generate a button for each network
+	for (int i = 0; i < G_SSID_Counter; i++)
+	{
+		String networkName = G_SSID_List[i];
+		client.print("<form action=\"/enterPassword?network=" + networkName + "\" method=\"post\">");
+		client.print("<input type=\"submit\" value=\"");
+		client.print(i+1);
+		client.print(". ");
+		client.print(networkName);
+		client.println("\"/>");
+		client.println("</form>");
+	}
+
+	client.println("</body>");
+	client.println("</html>");
+	client.print("<meta http-equiv=\"refresh\" content=\"20;url=http://"); client.print(WiFi.localIP()); client.println("\">");
+	// The HTTP response ends with another blank line:
+	client.println();
+}
+
+void EasyWiFi::sendEnterWifiPasswordPage(WiFiClient client, String request)
+{
+	// Extract the selected network from the request
+	String networkName = request.substring(request.indexOf("/enterPassword?network=") + 23);
+	networkName = networkName.substring(0, networkName.indexOf(" "));
+
+	// Send the HTTP header
+	client.println("HTTP/1.1 200 OK");
+	client.println("Content-Type: text/html");
+	client.println();
+
+	// Send the HTML page with password entry form
+	client.println("<html>");
+	client.println("<meta charset='UTF-8'>");
+	client.println("<meta name='viewport' content='width=device-width,initial-scale=1'>");
+	client.println("<head><title>Enter Wi-Fi Password</title></head>");
+	client.println("<body>");
+	client.print("<h2>Network: ");
+	client.print(networkName);
+	client.println("</h2>");
+	// Input fields
+	client.println("<form id=\"connectForm\" onsubmit=\"submitForm(event)\" method=\"post\">");
+	client.println("Password: <input id=\"passwordField\" type=\"password\" name=\"password\" /><br/>");
+	client.println("Show password: <input id=\"showPasswordCheckbox\" type=\"checkbox\" onchange=\"togglePasswordVisibility()\" /><br/>");
+	client.println("<input type=\"submit\" value=\"Connect\"/>");
+	client.println("</form>");
+
+	// JavaScript section
+	client.println("<script>");
+	// Function to toggle password visibility
+	client.println("function togglePasswordVisibility() {");
+	client.println("  var passwordField = document.getElementById('passwordField');");
+	client.println("  var showPasswordCheckbox = document.getElementById('showPasswordCheckbox');");
+	client.println("  if (showPasswordCheckbox.checked) {");
+	client.println("    passwordField.type = 'text';");
+	client.println("  } else {");
+	client.println("    passwordField.type = 'password';");
+	client.println("  }");
+	client.println("}");
+	// Function for handling the password sending
+	client.println("function submitForm(event) {");
+	client.println("  event.preventDefault();");
+	client.println("  var password = document.getElementById('passwordField').value;");
+	client.println("  var xhr = new XMLHttpRequest();");
+	client.println("  xhr.open('POST', '/connect', true);");
+	client.println("  xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');");
+	client.println("  xhr.onreadystatechange = function() {");
+	client.println("    if (xhr.readyState === 4 && xhr.status === 200) {");
+	client.println("      // Handle the server response if needed");
+	client.println("      console.log(xhr.responseText);");
+	client.println("    }");
+	client.println("  };");
+	client.println("  var params = 'network=" + networkName + "&password=' + encodeURIComponent(password);");
+	client.println("  xhr.send(params);");
+	client.println("}");
+	client.println("</script>");
+
+	client.println("</body>");
+	client.println("</html>");
+	// The HTTP response ends with another blank line:
+	client.println();
+}
+
 // SERIALPRINT Wifi Status - only for debug
 void EasyWiFi::PrintWiFiStatus()
 {
@@ -647,5 +993,43 @@ bool EasyWiFi::IsWifiNotConnectedOrReachable(int wifiStatus)
 	return (wifiStatus != WL_CONNECTED) || (WiFi.RSSI() <= -90) || (WiFi.RSSI() == 0);
 }
 
+int EasyWiFi::TryToConnectToWifiWithCredentials()
+{
+	int connectionAttempts = 0;
+	int wifiStatus = WiFi.status();
+	while (IsWifiNotConnectedOrReachable(wifiStatus) && connectionAttempts < MAX_CONNECT) // attempt to connect to WiFi network 3 times
+	{
+		#ifdef Debug_On
+			Serial.print("* Attempt#"); Serial.print(connectionAttempts); Serial.print(" to connect to Network: "); Serial.println(G_SSID); // print the network name (SSID);
+		#endif
+		wifiStatus = WiFi.begin(G_SSID, G_PASS);     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
+		delay(2000);                                 // wait 2 seconds for connection:
+		connectionAttempts++;                        // try-counter
+	}
+	return connectionAttempts;
+}
+
+void EasyWiFi::UpdateDeviceConnectedStatus()
+{
+	// Check AP status - new client on or off?
+	if (G_AP_Status != WiFi.status())
+	{
+		G_AP_Status = WiFi.status();        // it has changed update the variable
+		if (G_AP_Status == WL_AP_CONNECTED) // a device has connected to the AP
+		{
+			#ifdef Debug_On                     
+				Serial.println("Device connected to AP\n");
+			#endif                 
+			SetNINA_LED(CYAN); // Client on AP : CYAN
+			G_DNS_RequestCounter = 0; // reset DNS counter
+		}
+		else // a device has disconnected from the AP, and we are back in listening mode
+		{
+			#ifdef Debug_On                  
+				Serial.println("Device disconnected from AP\n");
+			#endif                    
+		}
+	} // end if loop changed G_AP_Status  
+}
 
 

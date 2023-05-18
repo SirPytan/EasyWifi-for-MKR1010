@@ -13,12 +13,13 @@
 #include <WiFiNINA.h>
 #include <WiFiUdp.h>
 
+
 // Define AccessPoint(AP) Wifi-Client parameters
 #define MAX_SSID 10                          // MAX number of SSID's listed after search
 #define SSID_BUFFER_SIZE 32                   // SSID name BUFFER size
 #define ACCESS_POINT_CHANNEL  5                        // AP wifi channel
-#define SECRET_SSID "UnKnownWireless"	    // Backup SSID - not required
-#define SECRET_PASS "NoPassword"	        // Backup Pass - not required
+#define SECRET_SSID "YourHomenetworName"	    // Hardcoded SSID - not required
+#define SECRET_PASS "YourPassword"	        // Hardcoded Pass - not required
 
 #define ACCESS_POINT_NAME "EasyWiFi_AP"
 #define MAX_CONNECT 4                        // Max number of wifi logon connects before opening AP
@@ -57,8 +58,19 @@ private:
     void AccessPointSetup();
     void AccessPointDNSScan();
     void AccessPointWiFiClientCheck();
+    void AccessPointWiFiClientCheck_Test();
     void PrintWiFiStatus();
     bool IsWifiNotConnectedOrReachable(int wifiStatus);
+    int TryToConnectToWifiWithCredentials();
+    void UpdateDeviceConnectedStatus();
+    void processRequest(WiFiClient client);
+    void handleProvidedWifiCredentials(WiFiClient client, String request);
+    void sendStartPage(WiFiClient client);
+    void sendNetworkList(WiFiClient client);
+    void sendEnterWifiPasswordPage(WiFiClient client, String request);
+    String getValueFromRequest(String requestBody, String key);
+    String urlDecode(String str);
+    boolean connectToNetwork(String networkName, String password);
 };
 
 #endif
